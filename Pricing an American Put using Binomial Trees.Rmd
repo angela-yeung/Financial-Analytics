@@ -1,0 +1,89 @@
+ ---
+title: "Pricing an American Put"
+output: R Markdown
+---
+
+Function to calculate the price of the underlying asset
+
+```{r}
+Stock_Price <- function(P0,sig,Dt,N){
+  X <- matrix(0,N+1,N+1)
+  u = exp(sig*sqrt(Dt))
+  d = exp(-sig*sqrt(Dt))
+  for(i in 1:nrow(X)){
+    for(j in 1:i){
+      X[i,j] <- P0*(d^(i-j))*(u^(j-1))
+    }
+  }
+  return(X)
+}
+```
+
+Function to compute the risk neutral probability of the stock going up by a factor of u 
+
+```{r}
+risk_neutral_prob <- function(r,sig,Dt){
+  u = exp(sig*sqrt(Dt))
+  d = exp(-sig*sqrt(Dt))
+  q = (exp(r*Dt)-d)/(u-d)
+  return(q)
+}
+```
+
+Function to compute the value of an American put (with strike price K) at each node of the tree 
+
+```{r}
+American_Put <- function(stock_price_tree,q,Dt,K,r){
+  N <- nrow(stock_price_tree)-1
+  F <- matrix(0,N+1,N+1)
+  for (j in 1:(N+1)){
+    F[N+1,j] <- max(0,K-stock_price_tree[N+1,j])
+  }
+  for(i in (nrow(F)-1):1){
+    for(j in i:1){
+      F[i,j] <- max(K-stock_price_tree[i,j], exp(-r*Dt)*(q*F[i+1,j+1]+(1-q)*F[i+1,j]))
+    }
+  }
+  return(F)  
+}
+```
+
+Function that gathers all the inputs from the above functions and returns the stock price and option value trees, the risk neutral probability q, the value of the time step size and the price of the American put option
+
+```{r}
+Binomial_Model <- function(P0,sig,T,N,K,r){
+  Dt = T/N
+  stock_price_tree <- Stock_Price(P0,sig,Dt,N)
+  q <- risk_neutral_prob(r,sig,Dt)
+  Option_value_tree <- American_Put(stock_price_tree,q,Dt,K,r)
+  Option_price <- Option_value_tree[1,1]
+  Output = NULL
+  Output$Stock_price_tree = Stock_price_tree
+  Output$Option_value_tree = Option_value_tree
+  Output$risk_neutral_prob = q
+  Output$time_step_size = Dt
+  Output$Option_price = Option_price
+  return(Output)
+}
+```
+
+An example of pricing an American put with:
+- intial price (P0) = $35
+- strike price (K) = $36.50
+- sigma (sig) = 0.28
+- Time in years (T) = 9/12 (ie. 9 months)
+- risk free rate of return (r) = 0.015
+
+```{r}
+Binomial_Model(35,0.28,9/12,3,36.5,0.015)
+```
+```{r}
+#plot option price against number of discrete periods
+price <- rep(0,47)
+for (N in 3:49){
+  temp <- Binomial_Model(35,0.28,9/12,N,36.5,0.015)
+  price[N-2] <- temp[length(temp)]
+}
+plot((3:49),price, xlab = "Number of discrete periods", ylab = "Option Price", main = "Option price vs number of discrete periods")
+```
+
