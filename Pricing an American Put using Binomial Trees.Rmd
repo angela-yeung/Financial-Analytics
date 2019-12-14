@@ -1,8 +1,10 @@
  ---
 title: "Pricing an American Put"
 output: R Markdown
----
-
+ ---
+An American option can be exercised early (ie. before maturity). It is not profitable (in a risk neutral sense) to exercise an American call on a non-dividend paying security early. However, it may be profitable to exercise an American Put early. Hence, the Black-Scholes pricing formula will undervalue the American Put option and is not applicable in this scenario. The code below computes the price of an American Put option using a binomial tree. 
+ ---
+ 
 Function to calculate the price of the underlying asset
 
 ```{r}
@@ -77,8 +79,10 @@ An example of pricing an American put with:
 ```{r}
 Binomial_Model(35,0.28,9/12,3,36.5,0.015)
 ```
+
+Plot option price against number of discrete periods
+
 ```{r}
-#plot option price against number of discrete periods
 price <- rep(0,47)
 for (N in 3:49){
   temp <- Binomial_Model(35,0.28,9/12,N,36.5,0.015)
