@@ -3,7 +3,7 @@ title: "Option pricing using Monte Carlo simulation"
 output: html_notebook
 ---
 
-The value of call option (ie. payoff) = max(Pt-K,0).
+The value of call option (ie. payoff) is defined as: max(Pt-K,0).
 
 A common approach to pricing a derivative security is to employ Monte Carlo simulation. This involves simulating the prices of the underlying asset over a discrete grid of time points.
 
