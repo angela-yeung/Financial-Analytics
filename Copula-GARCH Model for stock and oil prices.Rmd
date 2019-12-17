@@ -116,5 +116,5 @@ Rp <- exp(rp)-1
 VaR2 <- 1000000*quantile(Rp,0.01) 
 
 VaR
-VaR2
+VaR2 
 ```
