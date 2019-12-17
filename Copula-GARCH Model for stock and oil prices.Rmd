@@ -1,0 +1,120 @@
+---
+title: "Copular-GARCH Model for stock and oil prices"
+output: html_notebook
+---
+Copula models are used to capture the joint distribution and dependency between two continuously compounding asset returns. They can be used to undestand the relationship between two random variables via the dependency parameter (gamma). The Copula model is that it merely captures dependency, not just linear correlation. Another advantage of Copula models is that they do not require a specific model for marginal distributions. 
+
+In this case, I have decided to use GARCH models to model the marginal distribution of the continuously compounding returns of a stock and oil prices. GARCH models are more appropriate to model asset returns as it does not assume returns are homoscedastic (i.e the assumption that the variance of returns do not change over time) as in the Geometric Brownian Motion model. Therefore, the GARCH model is better able to capture 2 major patterns in volatility that are observed for most securities in real life: 
+
+1) volatility clustering: the tendency for days of high volatility to be proceeded and followed by high volatility
+2) volatility mean reversion: the tendency for volatility to slovely revert to a mean level after a sharp shock
+
+---
+Load libraries and set up working directory 
+
+```{r}
+library(tseries)
+library(fGarch)
+library(copula)
+
+setwd("C:/Users/...")
+```
+
+Reading in monthly observations on the West Texas Intermediate Oil Price and monthly (dividend-adjusted) prices on Southwest Airlines stock
+
+```{r}
+start = '1990-02-01'
+end   = '2016-06-02'
+p.luv = get.hist.quote("LUV", quote = "Adjusted", start = start, end = end, retclass = "zoo", compression = "m")
+freddat <- read.csv(file="POILWTIUSDM.csv",header=TRUE,sep=",") 
+
+```
+
+From the plots, we can see that there is conditional heteroscedasticity in both two returns series because the variance is non-constant and the future periods of high and low volitivity cannot be identified.
+
+```{r}
+r.luv <- diff(log(p.luv)) #continuously compounded returns
+r.wti <- diff(log(freddat[,2]))
+
+par(mfrow=c(2,2))
+plot(r.luv,type="l",main="LUV Returns")
+plot(r.wti,type="l",main="WTI Returns")
+plot(r.luv^2,type="l",main="LUV Sq. Ret.")
+plot(r.wti^2,type="l",main="WTI Sq. Ret.")
+
+```
+
+The below scatterplot does not reveal a strong relationship between the two returns, as the slope appears to be centred around 0.
+
+```{r}
+plot(r.wti,r.luv,main="WTI vs LUV Returns")
+
+```
+
+Fitting GARCH(1,1) with GAUSSIAN disturbances to each margin.
+
+The 𝑎0 across both stocks are positive. This is in line with our expectation as variance can only be positive. The 𝑎1 for both stocks are also positive, suggesting there is volatility clustering. The t-statistics for 𝑎1 suggest the coefficients significantly differ from zero at a 10% level of significance. The 𝛽1s are also greater than zero, further indicating that there is volatility clustering. The 𝛽1 t-statistics suggest the coefficients significantly differ from zero. In the GARCH(1,1) model, the 𝑎1 + 𝛽1 is 0.900 and 0.828 for LUV and WTI respectively. Being so close to 1, these values suggest that there is strong serial dependence.
+
+```{r}
+fit.wti <- garchFit(~garch(1,1),r.wti,trace=F)
+fit.luv <- garchFit(~garch(1,1),r.luv,trace=F)
+summary(fit.wti)
+summary(fit.luv)
+```
+
+Computing copula data & latent variables for WTI and LUV.
+
+From the scatterplot, we can see that there is no significant relationship between the two models, as the copula data is very spread out.
+
+```{r}
+# Compute copula data & latent variables for WTI and LUV
+uX <- pnorm(residuals(fit.wti,standardize=TRUE))
+xstar <- qnorm(uX)
+uY <- pnorm(residuals(fit.luv,standardize=TRUE))
+ystar <- qnorm(uY)
+gammahat <- cor(xstar,ystar)
+
+par(mfrow=c(2,2))
+plot(r.wti,r.luv,xlab="WTI",ylab="LUV",main="Returns Data")
+plot(uX,uY,xlab="WTI",ylab="LUV",main="Copula Data")
+plot(xstar,ystar,xlab="WTI",ylab="LUV",main="Latent Data")
+```
+
+Fitting a Gaussian copula. The estimate of gamma (ie. the dependence parameter) is -0.1176, suggesting a weak negative relationship.
+
+```{r}
+fit.gcop <- fitCopula(normalCopula(dim=2),cbind(uX,uY))
+summary(fit.gcop)
+
+```
+
+Computing the 1 month ahead VaR at the 1% level of a $1m portfolio of 70% Southwest Airlines stock and a 30% holding of WTI oil.
+
+```{r}
+# Compute 1-step-ahead predictive variances
+pred.wti <- predict(fit.wti,n.ahead=1)
+pred.luv <- predict(fit.luv,n.ahead=1)
+m1 <- pred.wti$meanForecast
+m2 <- pred.luv$meanForecast
+s1 <- pred.wti$standardDeviation
+s2 <- pred.luv$standardDeviation
+
+# Simulate N iterates from 1-step ahead forecast distributions
+n <- 1000 #number of Monte Carlo iterates 
+cop <- normalCopula(as.numeric(coef(fit.gcop))) #set the copula 
+usim <- rCopula(n,cop) 				#generate from the copula model
+r1 <- m1+s1*qnorm(usim[,1]) 			#transform to return space manually
+r2 <- m2+s2*qnorm(usim[,2])
+rp <- 0.3*r1 + 0.7*r2 #compute return on portfolio
+
+#Using continuously compounded returns
+Q <- quantile(rp,0.01) 
+VaR <- 1000000*(exp(Q)-1)				
+
+#Using simple returns
+Rp <- exp(rp)-1 
+VaR2 <- 1000000*quantile(Rp,0.01) 
+
+VaR
+VaR2
+```
